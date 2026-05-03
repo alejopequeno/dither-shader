@@ -12,6 +12,7 @@ const fragment = /* glsl */ `
   uniform float hoverStrength;  // radial push amount
   uniform float hoverScatter;   // per-cell random jitter intensity
   uniform float hoverActivity;  // 0..1 — modulated by mouse speed for spring-back
+  uniform float revealProgress; // 0 = blank paper, 1 = fully developed dither
 
   float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
@@ -73,8 +74,15 @@ const fragment = /* glsl */ `
     int by = int(mod(pixelCoord.y, 8.0));
     float t = (bayer(bx, by) + 0.5) / 64.0;
 
-    float bit = step(t + (threshold - 0.5), lum);
-    bit = mix(bit, 1.0 - bit, invert);
+    float ditherBit = step(t + (threshold - 0.5), lum);
+    ditherBit = mix(ditherBit, 1.0 - ditherBit, invert);
+
+    // Photographic-reveal mask: cells whose bayer threshold is below
+    // revealProgress flip on; the rest stay pure white "paper".  This makes
+    // the dither pattern materialise from sparse to dense as progress goes
+    // 0 -> 1, like film developing.
+    float revealMask = step(t, revealProgress);
+    float bit = mix(1.0, ditherBit, revealMask);
 
     outputColor = vec4(vec3(bit), 1.0);
   }
@@ -114,6 +122,7 @@ export class DitheringEffect extends Effect {
         ['hoverStrength', new Uniform(hoverStrength)],
         ['hoverScatter', new Uniform(hoverScatter)],
         ['hoverActivity', new Uniform(0)],
+        ['revealProgress', new Uniform(0)],
       ]),
     })
   }
@@ -128,6 +137,8 @@ export class DitheringEffect extends Effect {
   set hoverScatter(v: number) { this.uniforms.get('hoverScatter')!.value = v }
   set hoverActivity(v: number) { this.uniforms.get('hoverActivity')!.value = v }
   get hoverActivity(): number { return this.uniforms.get('hoverActivity')!.value as number }
+  set revealProgress(v: number) { this.uniforms.get('revealProgress')!.value = v }
+  get revealProgress(): number { return this.uniforms.get('revealProgress')!.value as number }
 
   get hoverPoint(): Vector2 {
     return this.uniforms.get('hoverPoint')!.value as Vector2
